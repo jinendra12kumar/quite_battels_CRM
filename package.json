@@ -1,0 +1,25 @@
+{
+  "name": "wear-your-battles",
+  "version": "1.0.0",
+  "description": "Wear Your Battles - Luxury Fashion Editorial & E-Commerce Web Experience",
+  "scripts": {
+    "dev:backend": "cd backend && node server.js",
+    "dev:frontend": "cd frontend && npm run dev",
+    "db:init": "cd backend && npm run db:init",
+    "db:seed": "cd backend && npm run db:seed",
+    "test:api": "cd backend && node testApi.js",
+    "build:frontend": "cd frontend && npm run build"
+  },
+  "keywords": [
+    "fashion",
+    "luxury",
+    "editorial",
+    "react",
+    "express",
+    "mysql",
+    "e-commerce"
+  ],
+  "author": "Creative Director",
+  "license": "ISC"
+}
+
