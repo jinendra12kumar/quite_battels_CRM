@@ -20,6 +20,8 @@ async function seedDatabase() {
 
     // Disable FK checks temporarily for clean truncated seed
     await connection.query('SET FOREIGN_KEY_CHECKS = 0');
+    await connection.query('DROP TABLE IF EXISTS order_items');
+    await connection.query('DROP TABLE IF EXISTS orders');
     await connection.query('TRUNCATE TABLE product_sizes');
     await connection.query('TRUNCATE TABLE product_images');
     await connection.query('TRUNCATE TABLE products');
@@ -240,6 +242,120 @@ To wear your battles is to realize you survived them all. You stand complete.`,
       );
     }
     console.log('Seeded 6 product sizes (XS to XXL)');
+
+    // 7. Seed Initial Orders for Revenue Calculation
+    // Ensure table exists in case schema wasn't rerun
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS \`orders\` (
+        \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+        \`order_code\` VARCHAR(50) NOT NULL UNIQUE,
+        \`customer_name\` VARCHAR(150) NOT NULL,
+        \`customer_email\` VARCHAR(150) NOT NULL,
+        \`customer_phone\` VARCHAR(50) DEFAULT NULL,
+        \`shipping_address\` TEXT NOT NULL,
+        \`city\` VARCHAR(100) NOT NULL,
+        \`postal_code\` VARCHAR(50) NOT NULL,
+        \`total_amount\` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        \`status\` ENUM('confirmed', 'processing', 'dispatched', 'delivered') NOT NULL DEFAULT 'confirmed',
+        \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB;
+    `);
+
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS \`order_items\` (
+        \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+        \`order_id\` INT NOT NULL,
+        \`product_id\` INT DEFAULT NULL,
+        \`product_name\` VARCHAR(255) NOT NULL,
+        \`size\` VARCHAR(10) NOT NULL,
+        \`quantity\` INT NOT NULL DEFAULT 1,
+        \`unit_price\` DECIMAL(10,2) NOT NULL,
+        \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (\`order_id\`) REFERENCES \`orders\`(\`id\`) ON DELETE CASCADE
+      ) ENGINE=InnoDB;
+    `);
+
+    const initialOrders = [
+      {
+        code: 'QB-839102',
+        name: 'Aiden Vance',
+        email: 'aiden.vance@atelier.com',
+        phone: '+91 98765 43210',
+        address: '42 Obsidian Boulevard, High-Rise 7',
+        city: 'Mumbai',
+        postalCode: '400001',
+        total: 3998.00,
+        status: 'delivered',
+        items: [{ size: 'L', qty: 2, price: 1999.00 }],
+      },
+      {
+        code: 'QB-521940',
+        name: 'Sarah Jenkins',
+        email: 'sarah.j@monochrome.io',
+        phone: '+91 98111 22334',
+        address: '15 Kalaroop Enclave',
+        city: 'New Delhi',
+        postalCode: '110001',
+        total: 1999.00,
+        status: 'delivered',
+        items: [{ size: 'M', qty: 1, price: 1999.00 }],
+      },
+      {
+        code: 'QB-941028',
+        name: 'Marcus Sterling',
+        email: 'marcus@arch.studio',
+        phone: '+91 99000 88776',
+        address: '88 Residency Road, Richmond Town',
+        city: 'Bengaluru',
+        postalCode: '560025',
+        total: 5997.00,
+        status: 'dispatched',
+        items: [{ size: 'XL', qty: 3, price: 1999.00 }],
+      },
+      {
+        code: 'QB-104928',
+        name: 'Elena Rostova',
+        email: 'elena@couture.fr',
+        phone: '+91 97654 32109',
+        address: 'B-10 Park Street, Heritage Manor',
+        city: 'Kolkata',
+        postalCode: '700016',
+        total: 1999.00,
+        status: 'processing',
+        items: [{ size: 'S', qty: 1, price: 1999.00 }],
+      },
+      {
+        code: 'QB-731920',
+        name: 'David Chen',
+        email: 'david.chen@nomad.com',
+        phone: '+91 98220 11223',
+        address: 'Villa 12, Jubilee Hills Sector 3',
+        city: 'Hyderabad',
+        postalCode: '500033',
+        total: 3998.00,
+        status: 'confirmed',
+        items: [{ size: 'M', qty: 2, price: 1999.00 }],
+      },
+    ];
+
+    let totalSeedRevenue = 0;
+    for (const ord of initialOrders) {
+      const [ordRes] = await connection.execute(
+        `INSERT INTO orders (order_code, customer_name, customer_email, customer_phone, shipping_address, city, postal_code, total_amount, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [ord.code, ord.name, ord.email, ord.phone, ord.address, ord.city, ord.postalCode, ord.total, ord.status]
+      );
+      totalSeedRevenue += ord.total;
+
+      for (const it of ord.items) {
+        await connection.execute(
+          `INSERT INTO order_items (order_id, product_id, product_name, size, quantity, unit_price)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [ordRes.insertId, productId, 'THE GENTLE ARMOR – OVERSIZED TEE', it.size, it.qty, it.price]
+        );
+      }
+    }
+    console.log(`Seeded ${initialOrders.length} initial orders with total revenue: ₹${totalSeedRevenue.toLocaleString('en-IN')}`);
 
     console.log('\n===============================================');
     console.log('DATABASE SEEDED SUCCESSFULLY!');

@@ -11,6 +11,7 @@ const seriesRoutes = require('./routes/seriesRoutes');
 const chapterRoutes = require('./routes/chapterRoutes');
 const productRoutes = require('./routes/productRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
+const orderRoutes = require('./routes/orderRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -59,6 +60,7 @@ app.use('/api/series', seriesRoutes);
 app.use('/api/chapters', chapterRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Error Middlewares
 app.use(notFound);

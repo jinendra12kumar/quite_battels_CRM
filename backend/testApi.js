@@ -117,6 +117,17 @@ async function runTests() {
   console.log('Product Gallery Images count:', p1Res.data?.data?.images?.length);
   console.log('Product Sizes count:', p1Res.data?.data?.sizes?.length);
 
+  // 9. Dashboard Stats & Revenue Calculation
+  console.log('\n9. Testing GET /api/orders/stats (Dashboard & Total Revenue)...');
+  const statsRes = await request({
+    hostname: 'localhost',
+    port: 5000,
+    path: '/api/orders/stats',
+    method: 'GET',
+  });
+  console.log('Total Revenue:', '₹' + statsRes.data?.data?.totalRevenue?.toLocaleString('en-IN'));
+  console.log('Total Orders:', statsRes.data?.data?.totalOrders);
+
   console.log('\n--- ALL BACKEND REST API ENDPOINTS VERIFIED SUCCESSFULLY! ---');
   process.exit(0);
 }

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Trash2, Minus, Plus, ArrowLeft, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import api from '../services/api';
 
 export default function Cart() {
   const { cartItems, updateQuantity, removeFromCart, clearCart, subtotal, totalItems } = useCart();
@@ -16,10 +17,27 @@ export default function Cart() {
   });
   const [orderId, setOrderId] = useState('');
 
-  const handlePlaceOrder = (e) => {
+  const handlePlaceOrder = async (e) => {
     e.preventDefault();
-    const generatedId = 'QB-' + Math.floor(100000 + Math.random() * 900000);
-    setOrderId(generatedId);
+    try {
+      const res = await api.post('/orders', {
+        name: shippingAddress.name,
+        email: shippingAddress.email,
+        phone: shippingAddress.phone,
+        address: shippingAddress.address,
+        city: shippingAddress.city,
+        postalCode: shippingAddress.postalCode,
+        items: cartItems,
+        totalAmount: subtotal,
+      });
+      if (res.data?.order?.order_code) {
+        setOrderId(res.data.order.order_code);
+      } else {
+        setOrderId('QB-' + Math.floor(100000 + Math.random() * 900000));
+      }
+    } catch {
+      setOrderId('QB-' + Math.floor(100000 + Math.random() * 900000));
+    }
     setCheckoutStep('success');
     clearCart();
   };

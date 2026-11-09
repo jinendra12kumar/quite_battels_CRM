@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowRight, AlertCircle } from 'lucide-react';
+import { ArrowRight, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import api, { FALLBACK_PRODUCT } from '../services/api';
 
@@ -42,6 +42,38 @@ export default function ProductDetail() {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [slug]);
 
+  const images = product.images && product.images.length > 0
+    ? product.images
+    : [
+        {
+          id: 1,
+          image_url: product.cover_image || 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?q=80&w=1200&auto=format&fit=crop',
+          caption: 'Front Studio View',
+        },
+      ];
+
+  // Serial slide navigation handlers
+  const handlePrevSlide = () => {
+    setSelectedImage((prev) => (prev - 1 + images.length) % images.length);
+  };
+
+  const handleNextSlide = () => {
+    setSelectedImage((prev) => (prev + 1) % images.length);
+  };
+
+  // Keyboard navigation for serial slides
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'ArrowLeft') {
+        setSelectedImage((prev) => (prev - 1 + images.length) % images.length);
+      } else if (e.key === 'ArrowRight') {
+        setSelectedImage((prev) => (prev + 1) % images.length);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [images.length]);
+
   const handleSizeSelect = (size) => {
     setSelectedSize(size);
     setSizeError(false);
@@ -55,16 +87,6 @@ export default function ProductDetail() {
 
     addToCart(product, selectedSize, quantity);
   };
-
-  const images = product.images && product.images.length > 0
-    ? product.images
-    : [
-        {
-          id: 1,
-          image_url: product.cover_image || 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?q=80&w=1200&auto=format&fit=crop',
-          caption: 'Front Studio View',
-        },
-      ];
 
   const currentSizeObj = product.sizes?.find((s) => s.size === selectedSize);
   const availableStock = currentSizeObj ? currentSizeObj.stock : product.stock || 50;
@@ -83,18 +105,18 @@ export default function ProductDetail() {
 
         {/* Main Product Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16">
-          {/* LEFT: Editorial Image Gallery */}
+          {/* LEFT: Editorial Serial Slide Gallery */}
           <div className="lg:col-span-7 flex flex-col-reverse md:flex-row gap-6">
-            {/* Thumbnails */}
+            {/* Thumbnails list */}
             <div className="flex md:flex-col gap-3 overflow-x-auto md:overflow-y-auto max-h-[650px] pb-2 md:pb-0 scrollbar-none">
               {images.map((img, index) => (
                 <button
                   key={img.id || index}
                   onClick={() => setSelectedImage(index)}
-                  className={`w-20 h-24 flex-shrink-0 bg-[#E8E1D6] border transition-all cursor-pointer overflow-hidden ${
+                  className={`w-20 h-24 flex-shrink-0 bg-[#E8E1D6] border transition-all cursor-pointer overflow-hidden relative group/thumb ${
                     selectedImage === index
-                      ? 'border-[#171717] ring-1 ring-[#171717] opacity-100'
-                      : 'border-[#D8D0C3] opacity-65 hover:opacity-100'
+                      ? 'border-[#171717] ring-2 ring-[#B49A70] opacity-100'
+                      : 'border-[#D8D0C3] opacity-60 hover:opacity-100'
                   }`}
                 >
                   <img
@@ -102,20 +124,80 @@ export default function ProductDetail() {
                     alt={img.caption || `Product view ${index + 1}`}
                     className="w-full h-full object-cover object-top"
                   />
+                  <span className="absolute bottom-1 right-1 bg-black/70 text-[#F3EFE7] text-[9px] font-mono px-1">
+                    0{index + 1}
+                  </span>
                 </button>
               ))}
             </div>
 
-            {/* Large Active Image View */}
-            <div className="flex-1 aspect-[4/5] bg-[#E8E1D6] border border-[#D8D0C3] overflow-hidden relative group shadow-sm">
+            {/* Large Active Serial Slide View with < and > options */}
+            <div className="flex-1 aspect-[4/5] bg-[#E8E1D6] border border-[#D8D0C3] overflow-hidden relative group shadow-sm select-none">
               <img
+                key={selectedImage}
                 src={images[selectedImage]?.image_url}
                 alt={images[selectedImage]?.caption || product.name}
-                className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
+                className="w-full h-full object-cover object-top transition-all duration-500 group-hover:scale-105"
               />
+
+              {/* Slide Counter Badge */}
+              <div className="absolute top-4 right-4 bg-[#171717]/85 backdrop-blur-md text-[#F3EFE7] border border-[#B49A70]/40 px-3 py-1 font-mono text-[10px] tracking-widest uppercase flex items-center space-x-1.5 z-10 shadow-md">
+                <span className="text-[#B49A70] font-bold">SLIDE 0{selectedImage + 1}</span>
+                <span className="text-[#77736C]">/</span>
+                <span>0{images.length}</span>
+              </div>
+
+              {/* Serial Slide Navigation Controls: < (Previous) and > (Next) */}
+              {images.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handlePrevSlide}
+                    aria-label="Previous Slide"
+                    className="absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 bg-[#171717]/85 hover:bg-[#B49A70] text-[#F3EFE7] hover:text-[#171717] border border-[#F3EFE7]/25 flex items-center justify-center transition-all cursor-pointer backdrop-blur-md z-20 shadow-xl active:scale-95 group/btn"
+                    title="Previous Slide (<)"
+                  >
+                    <ChevronLeft className="w-5 h-5 group-hover/btn:-translate-x-0.5 transition-transform" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleNextSlide}
+                    aria-label="Next Slide"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 bg-[#171717]/85 hover:bg-[#B49A70] text-[#F3EFE7] hover:text-[#171717] border border-[#F3EFE7]/25 flex items-center justify-center transition-all cursor-pointer backdrop-blur-md z-20 shadow-xl active:scale-95 group/btn"
+                    title="Next Slide (>)"
+                  >
+                    <ChevronRight className="w-5 h-5 group-hover/btn:translate-x-0.5 transition-transform" />
+                  </button>
+                </>
+              )}
+
+              {/* Slide Caption Box */}
               {images[selectedImage]?.caption && (
-                <div className="absolute bottom-4 left-4 right-4 bg-[#F3EFE7]/90 backdrop-blur-sm p-3 text-[11px] font-mono text-[#171717] border border-[#D8D0C3]">
-                  {images[selectedImage]?.caption}
+                <div className="absolute bottom-11 left-4 right-4 bg-[#F3EFE7]/90 backdrop-blur-sm p-3 text-[11px] font-mono text-[#171717] border border-[#D8D0C3] z-10 shadow-sm flex items-center justify-between">
+                  <span>{images[selectedImage]?.caption}</span>
+                  <span className="text-[9px] text-[#77736C] uppercase font-sans tracking-widest hidden sm:inline">
+                    Use &lt; &gt; or arrow keys to browse
+                  </span>
+                </div>
+              )}
+
+              {/* Slide Dot Indicators */}
+              {images.length > 1 && (
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center space-x-2 z-10 bg-[#171717]/60 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/10">
+                  {images.map((_, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setSelectedImage(idx)}
+                      aria-label={`Go to slide ${idx + 1}`}
+                      className={`transition-all rounded-full cursor-pointer ${
+                        selectedImage === idx
+                          ? 'w-6 h-1.5 bg-[#B49A70]'
+                          : 'w-1.5 h-1.5 bg-white/40 hover:bg-white/80'
+                      }`}
+                    />
+                  ))}
                 </div>
               )}
             </div>

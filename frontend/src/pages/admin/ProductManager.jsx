@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Plus, Edit2, Trash2, X, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ShoppingBag, Plus, Edit2, Trash2, X, ExternalLink, Upload, Image as ImageIcon, ChevronLeft, ChevronRight, Star, Check } from 'lucide-react';
 import AdminLayout from '../../components/admin/AdminLayout';
 import api, { FALLBACK_PRODUCT, FALLBACK_CHAPTERS } from '../../services/api';
 
@@ -9,6 +9,10 @@ export default function ProductManager() {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [msg, setMsg] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [newUrlInput, setNewUrlInput] = useState('');
+  const [newCaptionInput, setNewCaptionInput] = useState('');
+  const fileInputRef = useRef(null);
 
   const [formData, setFormData] = useState({
     chapter_id: 1,
@@ -23,8 +27,8 @@ export default function ProductManager() {
     stock: 70,
     status: 'published',
     images: [
-      { image_url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?q=80&w=1200&auto=format&fit=crop', caption: 'Front Studio View' },
-      { image_url: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?q=80&w=1200&auto=format&fit=crop', caption: 'Back Silhouette View' },
+      { image_url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?q=80&w=1200&auto=format&fit=crop', caption: 'Slide 1 – Front Studio View' },
+      { image_url: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?q=80&w=1200&auto=format&fit=crop', caption: 'Slide 2 – Back Silhouette View' },
     ],
     sizes: [
       { size: 'XS', stock: 8 },
@@ -58,6 +62,8 @@ export default function ProductManager() {
   const handleStartCreate = () => {
     setIsEditing(true);
     setEditingId(null);
+    setNewUrlInput('');
+    setNewCaptionInput('');
     setFormData({
       chapter_id: chapters[0]?.id || 1,
       name: '',
@@ -71,7 +77,8 @@ export default function ProductManager() {
       stock: 75,
       status: 'published',
       images: [
-        { image_url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?q=80&w=1200&auto=format&fit=crop', caption: 'Primary View' },
+        { image_url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?q=80&w=1200&auto=format&fit=crop', caption: 'Slide 1 – Front Studio View' },
+        { image_url: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?q=80&w=1200&auto=format&fit=crop', caption: 'Slide 2 – Back Silhouette View' },
       ],
       sizes: [
         { size: 'XS', stock: 8 },
@@ -87,6 +94,8 @@ export default function ProductManager() {
   const handleStartEdit = (prod) => {
     setIsEditing(true);
     setEditingId(prod.id);
+    setNewUrlInput('');
+    setNewCaptionInput('');
     setFormData({
       chapter_id: prod.chapter_id || 1,
       name: prod.name || '',
@@ -99,10 +108,15 @@ export default function ProductManager() {
       price: prod.price || 1999,
       stock: prod.stock || 70,
       status: prod.status || 'published',
-      images: prod.images || [
-        { image_url: prod.cover_image || '', caption: 'Main view' },
-      ],
-      sizes: prod.sizes || [
+      images: prod.images && prod.images.length > 0
+        ? prod.images.map((img) => ({
+            image_url: img.image_url,
+            caption: img.caption || '',
+          }))
+        : prod.cover_image
+        ? [{ image_url: prod.cover_image, caption: 'Primary View' }]
+        : [],
+      sizes: prod.sizes && prod.sizes.length > 0 ? prod.sizes : [
         { size: 'XS', stock: 8 },
         { size: 'S', stock: 14 },
         { size: 'M', stock: 22 },
@@ -113,15 +127,118 @@ export default function ProductManager() {
     });
   };
 
+  // Direct File Upload handler (one by one)
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const uploadData = new FormData();
+    uploadData.append('image', file);
+
+    setUploading(true);
+    try {
+      const res = await api.post('/upload', uploadData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const uploadedUrl = res.data?.url || (res.data?.data && res.data.data.file_url);
+      if (uploadedUrl) {
+        const slideNumber = formData.images.length + 1;
+        setFormData((prev) => ({
+          ...prev,
+          images: [
+            ...prev.images,
+            {
+              image_url: uploadedUrl,
+              caption: `Slide ${slideNumber} – ${file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')}`,
+            },
+          ],
+        }));
+        setMsg({ text: `Image "${file.name}" uploaded directly and added to product slides.`, type: 'success' });
+      }
+    } catch (err) {
+      console.warn('Backend file upload fallback:', err);
+      // Fallback local preview URL
+      const localUrl = URL.createObjectURL(file);
+      setFormData((prev) => ({
+        ...prev,
+        images: [
+          ...prev.images,
+          {
+            image_url: localUrl,
+            caption: `Slide ${prev.images.length + 1} – ${file.name.replace(/\.[^/.]+$/, '')}`,
+          },
+        ],
+      }));
+      setMsg({ text: `File added to product slides (preview mode).`, type: 'info' });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  // Add Image by URL (one by one)
+  const handleAddUrlImage = () => {
+    if (!newUrlInput.trim()) return;
+    const slideNumber = formData.images.length + 1;
+    setFormData((prev) => ({
+      ...prev,
+      images: [
+        ...prev.images,
+        {
+          image_url: newUrlInput.trim(),
+          caption: newCaptionInput.trim() || `Slide ${slideNumber} View`,
+        },
+      ],
+    }));
+    setNewUrlInput('');
+    setNewCaptionInput('');
+    setMsg({ text: 'Image added to product slide reel.', type: 'success' });
+  };
+
+  // Remove a slide
+  const handleRemoveImage = (indexToRemove) => {
+    setFormData((prev) => ({
+      ...prev,
+      images: prev.images.filter((_, idx) => idx !== indexToRemove),
+    }));
+  };
+
+  // Move slide order (left/right or up/down)
+  const handleMoveImage = (index, direction) => {
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= formData.images.length) return;
+    const updated = [...formData.images];
+    const temp = updated[index];
+    updated[index] = updated[newIndex];
+    updated[newIndex] = temp;
+    setFormData((prev) => ({ ...prev, images: updated }));
+  };
+
+  // Set an image as primary / cover slide
+  const handleSetPrimary = (index) => {
+    if (index === 0) return;
+    const updated = [...formData.images];
+    const [selected] = updated.splice(index, 1);
+    updated.unshift(selected);
+    setFormData((prev) => ({ ...prev, images: updated }));
+  };
+
+  // Update caption of an individual slide
+  const handleUpdateCaption = (index, newCaption) => {
+    const updated = [...formData.images];
+    updated[index] = { ...updated[index], caption: newCaption };
+    setFormData((prev) => ({ ...prev, images: updated }));
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     try {
       if (editingId) {
         await api.put(`/products/${editingId}`, formData);
-        setMsg({ text: 'Product artifact updated in MySQL database.', type: 'success' });
+        setMsg({ text: 'Product artifact updated in MySQL database with all slides.', type: 'success' });
       } else {
         await api.post('/products', formData);
-        setMsg({ text: 'New Product artifact created in database.', type: 'success' });
+        setMsg({ text: 'New Product artifact created in database with slide gallery.', type: 'success' });
       }
       setIsEditing(false);
       fetchProducts();
@@ -159,7 +276,7 @@ export default function ProductManager() {
   return (
     <AdminLayout
       title="PRODUCT MANAGEMENT"
-      subtitle="Configure pricing, sizes, inventory counts, and multi-angle product photography."
+      subtitle="Configure pricing, sizes, inventory counts, and multi-angle serial product photography."
     >
       {msg && (
         <div className="mb-6 p-3 bg-emerald-950/40 border border-emerald-800/40 text-emerald-300 text-xs flex justify-between items-center">
@@ -186,7 +303,7 @@ export default function ProductManager() {
 
       {/* Product Form */}
       {isEditing && (
-        <form onSubmit={handleSave} className="mb-8 border border-[#F3EFE7]/15 bg-[#222222] p-6 space-y-4 shadow-xl">
+        <form onSubmit={handleSave} className="mb-8 border border-[#F3EFE7]/15 bg-[#222222] p-6 space-y-6 shadow-xl">
           <div className="flex justify-between items-center border-b border-[#F3EFE7]/10 pb-3">
             <h3 className="font-brand text-sm uppercase tracking-wider text-[#F3EFE7] font-semibold">
               {editingId ? 'EDIT PRODUCT ARTIFACT' : 'CREATE NEW PRODUCT ARTIFACT'}
@@ -324,21 +441,207 @@ export default function ProductManager() {
             </div>
           </div>
 
-          {/* Primary & Gallery Images */}
-          <div className="space-y-2 border-t border-[#F3EFE7]/10 pt-4">
-            <label className="text-[10px] uppercase tracking-wider text-[#77736C] block font-semibold">
-              PRIMARY PRODUCT IMAGE URL
-            </label>
-            <input
-              type="text"
-              value={formData.images[0]?.image_url || ''}
-              onChange={(e) => {
-                const updated = [...formData.images];
-                updated[0] = { ...updated[0], image_url: e.target.value };
-                setFormData({ ...formData, images: updated });
-              }}
-              className="w-full bg-[#171717] border border-[#F3EFE7]/15 px-3 py-2 text-xs text-[#F3EFE7] focus:border-[#B49A70] focus:outline-none"
-            />
+          {/* ============================================================== */}
+          {/* BOTTOM SECTION: DIRECT FILE / IMAGE UPLOAD ONE-BY-ONE & SLIDES */}
+          {/* ============================================================== */}
+          <div className="border border-[#B49A70]/30 bg-[#171717] p-5 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#F3EFE7]/10 pb-3 gap-2">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <ImageIcon className="w-4 h-4 text-[#B49A70]" />
+                  <h4 className="font-brand text-xs uppercase tracking-[0.2em] text-[#F3EFE7] font-semibold">
+                    PRODUCT PHOTOGRAPHY & SERIAL SLIDES
+                  </h4>
+                </div>
+                <p className="text-[11px] text-[#77736C] font-light mt-0.5">
+                  Upload images one-by-one from device or enter URLs. Users will navigate these as serial slides using <span className="font-mono text-[#B49A70]">&lt; &gt;</span> controls.
+                </p>
+              </div>
+              <span className="text-xs font-mono text-[#B49A70] bg-[#222222] px-2.5 py-1 border border-[#B49A70]/30 self-start sm:self-auto font-bold">
+                {formData.images.length} {formData.images.length === 1 ? 'SLIDE' : 'SLIDES'} CONFIGURED
+              </span>
+            </div>
+
+            {/* Direct Upload Options: 1) File upload button, 2) URL input */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Option 1: Direct File Upload One-by-One */}
+              <div className="bg-[#222222] border border-[#F3EFE7]/15 p-4 flex flex-col justify-between space-y-3">
+                <div>
+                  <div className="flex items-center space-x-2 text-xs font-semibold text-[#F3EFE7] uppercase tracking-wider mb-1">
+                    <Upload className="w-3.5 h-3.5 text-[#B49A70]" />
+                    <span>OPTION 1: DIRECT FILE UPLOAD</span>
+                  </div>
+                  <p className="text-[11px] text-[#77736C]">
+                    Choose an image file from your computer to upload directly to the server.
+                  </p>
+                </div>
+
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+
+                <button
+                  type="button"
+                  disabled={uploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full py-2.5 px-4 bg-[#F3EFE7] text-[#171717] hover:bg-[#B49A70] text-xs uppercase tracking-wider font-semibold transition-colors flex items-center justify-center space-x-2 cursor-pointer shadow-sm disabled:opacity-50"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>{uploading ? 'UPLOADING TO ATELIER STORAGE...' : 'SELECT IMAGE FILE (ONE BY ONE)'}</span>
+                </button>
+              </div>
+
+              {/* Option 2: Add by URL */}
+              <div className="bg-[#222222] border border-[#F3EFE7]/15 p-4 flex flex-col justify-between space-y-3">
+                <div>
+                  <div className="flex items-center space-x-2 text-xs font-semibold text-[#F3EFE7] uppercase tracking-wider mb-1">
+                    <ImageIcon className="w-3.5 h-3.5 text-[#B49A70]" />
+                    <span>OPTION 2: ADD BY IMAGE URL</span>
+                  </div>
+                  <p className="text-[11px] text-[#77736C]">
+                    Enter external high-resolution photography link and caption.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <input
+                    type="url"
+                    value={newUrlInput}
+                    onChange={(e) => setNewUrlInput(e.target.value)}
+                    placeholder="https://images.unsplash.com/photo-..."
+                    className="w-full bg-[#171717] border border-[#F3EFE7]/15 px-3 py-1.5 text-xs text-[#F3EFE7] focus:border-[#B49A70] focus:outline-none"
+                  />
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      value={newCaptionInput}
+                      onChange={(e) => setNewCaptionInput(e.target.value)}
+                      placeholder="Caption (e.g., Detail Stitching View)"
+                      className="flex-1 bg-[#171717] border border-[#F3EFE7]/15 px-3 py-1.5 text-xs text-[#F3EFE7] focus:border-[#B49A70] focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddUrlImage}
+                      className="px-4 py-1.5 bg-[#B49A70] text-[#171717] text-xs uppercase tracking-wider font-semibold hover:bg-[#F3EFE7] transition-colors cursor-pointer"
+                    >
+                      ADD SLIDE
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Serial Slides List (One by one preview & order management) */}
+            <div className="space-y-3">
+              <label className="text-[10px] uppercase tracking-wider text-[#77736C] font-semibold block">
+                CURRENT SERIAL SLIDES (REORDER WITH &lt; &gt; OR DELETE)
+              </label>
+
+              {formData.images.length === 0 ? (
+                <div className="p-8 text-center border border-dashed border-[#F3EFE7]/15 text-[#77736C] text-xs">
+                  No images added yet. Use direct file upload or image URL above to add slides.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {formData.images.map((img, idx) => {
+                    const isPrimary = idx === 0;
+                    return (
+                      <div
+                        key={idx}
+                        className={`bg-[#222222] border p-3 flex flex-col justify-between space-y-3 relative group transition-all ${
+                          isPrimary ? 'border-[#B49A70] ring-1 ring-[#B49A70]/40' : 'border-[#F3EFE7]/15'
+                        }`}
+                      >
+                        {/* Slide Badge */}
+                        <div className="flex items-center justify-between text-[10px] font-mono">
+                          <span className={`px-2 py-0.5 uppercase tracking-wider font-bold ${
+                            isPrimary
+                              ? 'bg-[#B49A70] text-[#171717]'
+                              : 'bg-white/10 text-[#F3EFE7]'
+                          }`}>
+                            {isPrimary ? 'SLIDE 01 (COVER)' : `SLIDE 0${idx + 1}`}
+                          </span>
+                          {!isPrimary && (
+                            <button
+                              type="button"
+                              onClick={() => handleSetPrimary(idx)}
+                              className="text-[#77736C] hover:text-[#B49A70] flex items-center space-x-1 cursor-pointer"
+                              title="Set as first cover slide"
+                            >
+                              <Star className="w-3 h-3" />
+                              <span className="text-[9px] uppercase">MAKE COVER</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Thumbnail */}
+                        <div className="w-full aspect-[4/3] bg-black overflow-hidden border border-[#F3EFE7]/10 relative">
+                          <img
+                            src={img.image_url}
+                            alt={img.caption || `Slide ${idx + 1}`}
+                            className="w-full h-full object-cover object-top"
+                          />
+                        </div>
+
+                        {/* Caption Editor */}
+                        <div className="space-y-1">
+                          <label className="text-[9px] uppercase text-[#77736C] font-mono block">
+                            SLIDE CAPTION:
+                          </label>
+                          <input
+                            type="text"
+                            value={img.caption || ''}
+                            onChange={(e) => handleUpdateCaption(idx, e.target.value)}
+                            placeholder={`Slide ${idx + 1} description`}
+                            className="w-full bg-[#171717] border border-[#F3EFE7]/15 px-2 py-1 text-[11px] text-[#F3EFE7] focus:border-[#B49A70] focus:outline-none"
+                          />
+                        </div>
+
+                        {/* Slide Serial Navigation Controls: < (Left) and > (Right) + Delete */}
+                        <div className="flex items-center justify-between pt-2 border-t border-[#F3EFE7]/10">
+                          <div className="flex items-center space-x-1">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => handleMoveImage(idx, -1)}
+                              className="p-1.5 bg-[#171717] border border-[#F3EFE7]/20 text-[#F3EFE7] hover:text-[#B49A70] hover:border-[#B49A70] disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
+                              title="Move slide left (&lt;)"
+                            >
+                              <ChevronLeft className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="text-[10px] font-mono text-[#77736C] px-1">
+                              {idx + 1}/{formData.images.length}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={idx === formData.images.length - 1}
+                              onClick={() => handleMoveImage(idx, 1)}
+                              className="p-1.5 bg-[#171717] border border-[#F3EFE7]/20 text-[#F3EFE7] hover:text-[#B49A70] hover:border-[#B49A70] disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
+                              title="Move slide right (&gt;)"
+                            >
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveImage(idx)}
+                            className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors cursor-pointer"
+                            title="Remove slide"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex justify-end space-x-3 pt-3 border-t border-[#F3EFE7]/10">
@@ -351,9 +654,9 @@ export default function ProductManager() {
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-[#F3EFE7] text-[#171717] hover:bg-[#B49A70] text-xs uppercase tracking-wider font-semibold transition-colors"
+              className="px-5 py-2 bg-[#F3EFE7] text-[#171717] hover:bg-[#B49A70] text-xs uppercase tracking-wider font-semibold transition-colors cursor-pointer shadow-md"
             >
-              SAVE PRODUCT
+              SAVE PRODUCT & SLIDES
             </button>
           </div>
         </form>
@@ -364,12 +667,17 @@ export default function ProductManager() {
         {products.map((prod) => (
           <div key={prod.id} className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center space-x-4">
-              <div className="w-16 h-20 bg-[#171717] overflow-hidden flex-shrink-0 border border-[#F3EFE7]/10">
+              <div className="w-16 h-20 bg-[#171717] overflow-hidden flex-shrink-0 border border-[#F3EFE7]/10 relative group">
                 <img
                   src={prod.images?.[0]?.image_url || prod.cover_image || 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?q=80&w=1200&auto=format&fit=crop'}
                   alt={prod.name}
                   className="w-full h-full object-cover"
                 />
+                {prod.images && prod.images.length > 1 && (
+                  <span className="absolute bottom-1 right-1 bg-black/80 text-[#B49A70] text-[9px] font-mono px-1 font-bold">
+                    {prod.images.length}
+                  </span>
+                )}
               </div>
               <div className="space-y-1">
                 <div className="flex items-center space-x-2">
@@ -379,6 +687,11 @@ export default function ProductManager() {
                   <span className="px-2 py-0.5 text-[9px] uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
                     {prod.status || 'published'}
                   </span>
+                  {prod.images && prod.images.length > 0 && (
+                    <span className="px-2 py-0.5 text-[9px] uppercase tracking-wider bg-[#B49A70]/20 text-[#B49A70] border border-[#B49A70]/30 font-mono font-bold">
+                      {prod.images.length} {prod.images.length === 1 ? 'SLIDE' : 'SLIDES'}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center space-x-3 text-xs">
                   <span className="font-serif text-[#F3EFE7] font-semibold">

@@ -112,3 +112,34 @@ CREATE TABLE IF NOT EXISTS `media_library` (
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
+-- 8. Customer Orders
+CREATE TABLE IF NOT EXISTS `orders` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `order_code` VARCHAR(50) NOT NULL UNIQUE,
+  `customer_name` VARCHAR(150) NOT NULL,
+  `customer_email` VARCHAR(150) NOT NULL,
+  `customer_phone` VARCHAR(50) DEFAULT NULL,
+  `shipping_address` TEXT NOT NULL,
+  `city` VARCHAR(100) NOT NULL,
+  `postal_code` VARCHAR(50) NOT NULL,
+  `total_amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  `status` ENUM('confirmed', 'processing', 'dispatched', 'delivered') NOT NULL DEFAULT 'confirmed',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_orders_code` (`order_code`),
+  INDEX `idx_orders_created` (`created_at`)
+) ENGINE=InnoDB;
+
+-- 9. Order Items
+CREATE TABLE IF NOT EXISTS `order_items` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `order_id` INT NOT NULL,
+  `product_id` INT DEFAULT NULL,
+  `product_name` VARCHAR(255) NOT NULL,
+  `size` VARCHAR(10) NOT NULL,
+  `quantity` INT NOT NULL DEFAULT 1,
+  `unit_price` DECIMAL(10,2) NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (`order_id`) REFERENCES `orders`(`id`) ON DELETE CASCADE,
+  INDEX `idx_order_items_order` (`order_id`)
+) ENGINE=InnoDB;
+
